@@ -155,7 +155,8 @@ if __name__ == "__main__":
     # 비디오 캡처 초기화
     cap = cv2.VideoCapture(0)
     recorder = Recording()
-
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
