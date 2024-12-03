@@ -13,7 +13,7 @@ data = pd.read_csv("landmarks.csv")
 print(data.head())
 
 # 입력 변수와 레이블 분리
-X = data[["one", "two", "three", "four", "five"]]  # 특징 변수
+X = data.drop(["y"], axis=1)  # 특징 변수
 y = data["y"]  # 레이블
 
 # 데이터셋을 학습셋과 테스트셋으로 나누기
