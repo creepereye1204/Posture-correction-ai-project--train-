@@ -1,93 +1,58 @@
+import mediapipe as mp
 import numpy as np
 import cv2
-import mediapipe as mp
-import logging
 import csv
 import os
 
-# 랜드마크 인덱스 정의
 NOSE = 0
 LEFT_EYE = 7
 RIGHT_EYE = 8
 LEFT_SHOULDER = 11
 RIGHT_SHOULDER = 12
-CHIN = 152
 
-# Mediapipe 초기화
 mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
-mp_face_mesh = mp.solutions.face_mesh
-
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
 
 
-class Recording:
+class PostureCorrection:
     def __init__(self):
         self.pose = mp_pose.Pose()
-        self.csv_file = "landmarks.csv"
-        self._initialize_csv()
-
-    def _initialize_csv(self):
-        # CSV 파일 초기화
-        if not os.path.exists(self.csv_file):
-            with open(self.csv_file, mode="w", newline="") as file:
-                writer = csv.writer(file)
-                # CSV 헤더 작성
-                writer.writerow(
-                    [
-                        "face rotation",
-                        "shoulder between angle",
-                        "neck angle",
-                        "shoulder angle",
-                        "eye angle",
-                    ]
-                )
+        self.data = []
 
     def process_image(self, image):
-        # 이미지 처리
         pose_results = self.pose.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        black_image = np.zeros_like(image)
 
         if pose_results.pose_landmarks:
-            # 랜드마크 그리기
-            mp_drawing.draw_landmarks(image, pose_results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+            landmarks = pose_results.pose_landmarks.landmark
+            results = self._preprocess_landmarks(landmarks)
+            self._draw_landmarks(black_image, landmarks)
+            black_image = cv2.flip(black_image, 1)
+            self._display_angles(black_image, results)
+            self._save_data(results)
 
-            # 랜드마크 좌표 가져오기
-            nose_landmark = self._change_to_np(pose_results.pose_landmarks.landmark[NOSE])
-            left_eye_landmark = self._change_to_np(pose_results.pose_landmarks.landmark[LEFT_EYE])
-            right_eye_landmark = self._change_to_np(pose_results.pose_landmarks.landmark[RIGHT_EYE])
+        return black_image
 
-            left_shoulder_landmark = self._change_to_np(
-                pose_results.pose_landmarks.landmark[LEFT_SHOULDER]
-            )
-            right_shoulder_landmark = self._change_to_np(
-                pose_results.pose_landmarks.landmark[RIGHT_SHOULDER]
-            )
+    def _draw_landmarks(self, image, landmarks):
+        h, w, _ = image.shape
+        for landmark in landmarks:
+            cx, cy = int(landmark.x * w), int(landmark.y * h)
+            cv2.circle(image, (cx, cy), 5, (0, 255, 0), -1)
 
-            # 중간 어깨 랜드마크 계산
-            middle_shoulder_landmark = (left_shoulder_landmark + right_shoulder_landmark) / 2
+    def _preprocess_landmarks(self, landmarks):
+        points = [self._change_to_np(landmark) for landmark in landmarks]
+        nose, left_eye, right_eye, left_shoulder, right_shoulder = (
+            points[NOSE],
+            points[LEFT_EYE],
+            points[RIGHT_EYE],
+            points[LEFT_SHOULDER],
+            points[RIGHT_SHOULDER],
+        )
+        middle_shoulder = (left_shoulder + right_shoulder) / 2
 
-            # 사전 처리 함수 호출
-            self._preprocess(
-                nose_landmark,
-                left_eye_landmark,
-                right_eye_landmark,
-                left_shoulder_landmark,
-                right_shoulder_landmark,
-                middle_shoulder_landmark,
-            )
-        else:
-            logging.info("포즈 또는 얼굴 감지 실패.")
+        return self._preprocess(nose, left_eye, right_eye, left_shoulder, right_shoulder, middle_shoulder)
 
-    def _preprocess(
-        self,
-        nose,
-        left_eye,
-        right_eye,
-        left_shoulder,
-        right_shoulder,
-        middle_shoulder,
-    ):
+    def _preprocess(self, nose, left_eye, right_eye, left_shoulder, right_shoulder, middle_shoulder):
         parameters_combination = [
             [(nose, left_eye, right_eye), self._calculate_ratio],
             [(nose, left_shoulder, right_shoulder), self._calculate_angle],
@@ -95,76 +60,84 @@ class Recording:
             [(left_shoulder, right_shoulder), self._calculate_angle],
             [(nose, left_eye, right_eye), self._calculate_angle],
         ]
-        results = []  # 결과를 저장할 리스트
-        for parameters, func in parameters_combination:
-            result = func(*parameters)
-            results.append(result)  # 결과 리스트에 추가
-            logging.info(result)
+        return [func(*params) for params, func in parameters_combination]
 
-        # 결과를 CSV에 저장 (5개씩)
-        if len(results) >= 5:
-            self._save_parameters_to_csv(results)
+    def _display_angles(self, image, results):
+        angle_labels = [
+            "Eye Ratio",
+            "Nose And Shoulder Angle",
+            "Y Angle",
+            "X Angle",
+            "Eye Angle",
+        ]
+        for i, angle in enumerate(results):
+            cv2.putText(
+                image,
+                f"{angle_labels[i]}: {angle:.2f}",
+                (10, 30 + i * 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
 
-    def _save_parameters_to_csv(self, results):
-        with open(self.csv_file, mode="a", newline="") as file:
+    def _save_data(self, results):
+        self.data.append(results)
+
+    def save_to_csv(self, filename):
+        file_exists = os.path.isfile(filename)
+
+        with open(filename, mode="a", newline="") as file:
             writer = csv.writer(file)
-            writer.writerow(results)  # 결과 리스트를 CSV에 저장
+            if not file_exists:
+                writer.writerow(["Eye Ratio", "Nose And Shoulder Angle", "Y Angle", "X Angle", "Eye Angle"])
+            writer.writerows(self.data)
 
     def _change_to_np(self, joint):
         return np.array([joint.x, joint.y])
 
     def change_to_vector(func):
         def wrapper(self, A, B, C=None):
-            if C is not None:
-                AB = B - A
-                AC = C - A
-                return func(self, AB, AC)
-            else:
-                AB = B - A
-                return func(self, AB)
+            AB = B - A
+            AC = C - A if C is not None else None
+            return func(self, AB, AC) if AC is not None else func(self, AB)
 
         return wrapper
 
     @change_to_vector
     def _calculate_ratio(self, AB, AC):
-        ratio = np.linalg.norm(AB) / np.linalg.norm(AC)
-        return ratio
+        return np.linalg.norm(AB) / np.linalg.norm(AC)
 
     @change_to_vector
     def _calculate_angle(self, AB, AC=None):
         if AC is not None:
             cos_theta = np.dot(AB, AC) / (np.linalg.norm(AB) * np.linalg.norm(AC))
-            theta = np.arccos(cos_theta)
-        else:
-            tan_theta = AB[1] / AB[0]
-            theta = np.arctan(tan_theta)
-
-        angle = np.degrees(theta)
-        return angle
+            return np.degrees(np.arccos(cos_theta))
+        return np.degrees(np.arctan2(AB[1], AB[0]))
 
     def release_resources(self):
         self.pose.close()
 
 
-# 사용 예시
 if __name__ == "__main__":
-    # 비디오 캡처 초기화
     cap = cv2.VideoCapture(0)
-    recorder = Recording()
+    model = PostureCorrection()
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
 
-        recorder.process_image(frame)
-
-        cv2.imshow("Video Stream", frame)
+        result = model.process_image(frame)
+        cv2.imshow("Video Stream", result)
 
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
+    model.save_to_csv("posture.csv")
+
     cap.release()
     cv2.destroyAllWindows()
-    recorder.release_resources()
+    model.release_resources()
