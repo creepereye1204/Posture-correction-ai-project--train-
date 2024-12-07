@@ -48,26 +48,19 @@ class PostureCorrection:
             points[LEFT_SHOULDER],
             points[RIGHT_SHOULDER],
         )
-        middle_shoulder = (left_shoulder + right_shoulder) / 2
 
-        return self._preprocess(nose, left_eye, right_eye, left_shoulder, right_shoulder, middle_shoulder)
+        return self._preprocess(nose, left_eye, right_eye, left_shoulder, right_shoulder)
 
-    def _preprocess(self, nose, left_eye, right_eye, left_shoulder, right_shoulder, middle_shoulder):
+    def _preprocess(self, nose, left_eye, right_eye, left_shoulder, right_shoulder):
         parameters_combination = [
-            [(nose, left_eye, right_eye), self._calculate_ratio],
             [(nose, left_shoulder, right_shoulder), self._calculate_angle],
-            [(nose, middle_shoulder), self._calculate_angle],
-            [(left_shoulder, right_shoulder), self._calculate_angle],
             [(nose, left_eye, right_eye), self._calculate_angle],
         ]
         return [func(*params) for params, func in parameters_combination]
 
     def _display_angles(self, image, results):
         angle_labels = [
-            "Eye Ratio",
             "Nose And Shoulder Angle",
-            "Y Angle",
-            "X Angle",
             "Eye Angle",
         ]
         for i, angle in enumerate(results):
@@ -90,7 +83,7 @@ class PostureCorrection:
         with open(filename, mode="a", newline="") as file:
             writer = csv.writer(file)
             if not file_exists:
-                writer.writerow(["Eye Ratio", "Nose And Shoulder Angle", "Y Angle", "X Angle", "Eye Angle"])
+                writer.writerow(["Nose And Shoulder Angle", "Eye Angle"])
             writer.writerows(self.data)
 
     def _change_to_np(self, joint):
@@ -136,7 +129,7 @@ if __name__ == "__main__":
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
-    model.save_to_csv("posture.csv")
+    model.save_to_csv("posture3.csv")
 
     cap.release()
     cv2.destroyAllWindows()

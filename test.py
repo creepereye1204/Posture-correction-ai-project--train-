@@ -4,7 +4,7 @@ import cv2
 import joblib
 import pandas as pd
 
-# 랜드마크 인덱스 정의
+
 NOSE = 0
 LEFT_EYE = 7
 RIGHT_EYE = 8
@@ -18,7 +18,7 @@ mp_pose = mp.solutions.pose
 class PostureCorrection:
     def __init__(self, model_path):
         self.pose = mp_pose.Pose()
-        self.model = joblib.load(model_path)  # 모델 로드
+        self.model = joblib.load(model_path)
 
     def process_image(self, image):
         pose_results = self.pose.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -30,14 +30,10 @@ class PostureCorrection:
             self._draw_landmarks(black_image, landmarks)
             black_image = cv2.flip(black_image, 1)
 
-            # 예측
-            features = np.array(results).reshape(1, -1)  # 모델 입력 형식에 맞게 변환
-            features_df = pd.DataFrame(
-                features, columns=["Eye Ratio", "Nose And Shoulder Angle", "Y Angle", "X Angle", "Eye Angle"]
-            )
+            features = np.array(results).reshape(1, -1)
+            features_df = pd.DataFrame(features, columns=["Nose And Shoulder Angle", "Eye Angle"])
             prediction = self.model.predict(features_df)[0]
 
-            # 예측 결과에 따라 텍스트 표시
             status_text = "Normal" if prediction == 0 else "Abnormal"
             cv2.putText(black_image, status_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
@@ -60,26 +56,19 @@ class PostureCorrection:
             points[LEFT_SHOULDER],
             points[RIGHT_SHOULDER],
         )
-        middle_shoulder = (left_shoulder + right_shoulder) / 2
 
-        return self._preprocess(nose, left_eye, right_eye, left_shoulder, right_shoulder, middle_shoulder)
+        return self._preprocess(nose, left_eye, right_eye, left_shoulder, right_shoulder)
 
-    def _preprocess(self, nose, left_eye, right_eye, left_shoulder, right_shoulder, middle_shoulder):
+    def _preprocess(self, nose, left_eye, right_eye, left_shoulder, right_shoulder):
         parameters_combination = [
-            [(nose, left_eye, right_eye), self._calculate_ratio],
             [(nose, left_shoulder, right_shoulder), self._calculate_angle],
-            [(nose, middle_shoulder), self._calculate_angle],
-            [(left_shoulder, right_shoulder), self._calculate_angle],
             [(nose, left_eye, right_eye), self._calculate_angle],
         ]
         return [func(*params) for params, func in parameters_combination]
 
     def _display_angles(self, image, results):
         angle_labels = [
-            "Eye Ratio",
             "Nose And Shoulder Angle",
-            "Y Angle",
-            "X Angle",
             "Eye Angle",
         ]
         for i, angle in enumerate(results):
@@ -121,7 +110,7 @@ class PostureCorrection:
 
 if __name__ == "__main__":
     cap = cv2.VideoCapture(0)
-    model_path = "random_forest_model.pkl"  # 모델 경로
+    model_path = "random_forest_model3.pkl"
     posture_model = PostureCorrection(model_path)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
