@@ -129,7 +129,7 @@ if __name__ == "__main__":
         if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
-    model.save_to_csv("posture3.csv")
+    model.save_to_csv("posture8.csv")
 
     cap.release()
     cv2.destroyAllWindows()

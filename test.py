@@ -1,9 +1,13 @@
+import os
+import sys
 import mediapipe as mp
 import numpy as np
 import cv2
 import joblib
 import pandas as pd
-
+import time
+import winsound
+import threading
 
 NOSE = 0
 LEFT_EYE = 7
@@ -19,6 +23,10 @@ class PostureCorrection:
     def __init__(self, model_path):
         self.pose = mp_pose.Pose()
         self.model = joblib.load(model_path)
+        self.abnormal_duration = 0
+        self.alarm_threshold = 2
+        self.last_prediction = 0
+        self.alarm_active = False
 
     def process_image(self, image):
         pose_results = self.pose.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -39,7 +47,23 @@ class PostureCorrection:
 
             self._display_angles(black_image, results)
 
+            if prediction == 1:
+                self.abnormal_duration += 1 / 30
+                if self.abnormal_duration >= self.alarm_threshold and not self.alarm_active:
+                    self.alarm_active = True
+                    threading.Thread(target=self.sound_alarm).start()
+            else:
+                self.abnormal_duration = 0
+                self.alarm_active = False
+
         return black_image
+
+    def sound_alarm(self):
+        frequency = 1000
+        duration = 1000
+        while self.alarm_active:
+            winsound.Beep(frequency, duration)
+            time.sleep(1)
 
     def _draw_landmarks(self, image, landmarks):
         h, w, _ = image.shape
@@ -110,7 +134,12 @@ class PostureCorrection:
 
 if __name__ == "__main__":
     cap = cv2.VideoCapture(0)
-    model_path = "random_forest_model3.pkl"
+
+    if getattr(sys, "frozen", False):
+        model_path = os.path.join(sys._MEIPASS, "random_forest_model12.pkl")
+    else:
+        model_path = "./random_forest_model12.pkl"
+
     posture_model = PostureCorrection(model_path)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)

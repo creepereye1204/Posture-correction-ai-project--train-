@@ -1,49 +1,73 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier  # RandomForestClassifier 모듈 임포트
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, precision_score, recall_score, f1_score
 from sklearn.tree import plot_tree
 import matplotlib.pyplot as plt
 import joblib
+import numpy as np
 
-# 데이터 로드
-data = pd.read_csv("posture3.csv")
-
-# 데이터 확인
+data = pd.read_csv("posture8.csv")
 print(data.head())
 
-# Feature와 Label 구분
 X = data.drop(["Label"], axis=1)
 y = data["Label"]
 
-# 데이터 분할
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Random Forest 모델 생성
-model = RandomForestClassifier(n_estimators=100, max_depth=2, random_state=42)  # n_estimators 추가
-
-# 모델 학습
+model = RandomForestClassifier(n_estimators=100, max_depth=2, random_state=42)
 model.fit(X_train, y_train)
 
-# 예측
 y_pred = model.predict(X_test)
 
-# 정확도 및 분류 리포트 출력
-print("Accuracy:", accuracy_score(y_test, y_pred))
-print(classification_report(y_test, y_pred))
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred, average="weighted")
+recall = recall_score(y_test, y_pred, average="weighted")
+f1 = f1_score(y_test, y_pred, average="weighted")
 
-# 모델 저장
-joblib.dump(model, "random_forest_model4.pkl")  # 모델 이름 수정
+print("Accuracy:", accuracy)
+print("Precision:", precision)
+print("Recall:", recall)
+print("F1 Score:", f1)
 
-# 첫 번째 결정 트리 시각화 (랜덤 포레스트는 여러 트리를 가지므로 첫 번째 트리만 시각화)
+conf_matrix = confusion_matrix(y_test, y_pred)
+print("Confusion Matrix:\n", conf_matrix)
+
+kf = KFold(n_splits=5, shuffle=True, random_state=42)
+cv_accuracy = cross_val_score(model, X, y, cv=kf, scoring="accuracy")
+cv_f1 = cross_val_score(model, X, y, cv=kf, scoring="f1_weighted")
+
+print("K-Fold Cross-Validation Results:")
+for i in range(len(cv_accuracy)):
+    print(f"Fold {i+1}:")
+    print(f"   Accuracy: {cv_accuracy[i]:.4f}")
+    print(f"   F1 Score: {cv_f1[i]:.4f}")
+
+print("\nMean Accuracy: ", cv_accuracy.mean())
+print("Mean F1 Score: ", cv_f1.mean())
+
+plt.figure(figsize=(12, 6))
+labels = ["Accuracy", "F1 Score"]
+scores = [accuracy, f1]
+
+plt.bar(labels, scores, color=["blue", "orange"])
+plt.ylim(0, 1)
+plt.ylabel("Score")
+plt.title("Model Performance Metrics")
+
+mean_cv_accuracy = cv_accuracy.mean()
+mean_cv_f1 = cv_f1.mean()
+plt.bar(["Mean K-Fold Accuracy", "Mean K-Fold F1 Score"], [mean_cv_accuracy, mean_cv_f1], color=["green", "red"])
+
+plt.savefig("model_performance_metrics.png")
+plt.close()
+
 plt.figure(figsize=(20, 10))
-plot_tree(
-    model.estimators_[0], feature_names=X.columns, filled=True, rounded=True, class_names=["Normal", "Abnormal"]
-)  # 첫 번째 트리 시각화
+plot_tree(model.estimators_[0], feature_names=X.columns, filled=True, rounded=True, class_names=["Normal", "Abnormal"])
 plt.title("Visualizing Random Forest")
-plt.show()
+plt.savefig("random_forest_tree.png")
+plt.close()
 
-# 각 리프 노드에서 예측된 클래스 값 출력
 n_trees = len(model.estimators_)
 for i in range(n_trees):
     tree = model.estimators_[i]
@@ -53,49 +77,10 @@ for i in range(n_trees):
     value = tree.tree_.value
 
     for node in range(n_nodes):
-        if children_left[node] != children_right[node]:  # 리프 노드가 아닐 경우
+        if children_left[node] != children_right[node]:
             continue
-        # 클래스 예측 값 (리프 노드의 가장 높은 값)
         predicted_class = value[node].argmax()
         print(f"Tree {i}, Node {node}: Predicted class = {predicted_class} (0: Normal, 1: Abnormal)")
-# import pandas as pd
-# import joblib
-# import matplotlib.pyplot as plt
-# from sklearn.tree import plot_tree
 
-# # 모델 로드
-# model = joblib.load("random_forest_model.pkl")
-
-# # 데이터 로드 (시각화를 위해 Feature 이름을 가져오기 위해 필요)
-# data = pd.read_csv("posture2.csv")
-
-# # Feature와 Label 구분
-# X = data.drop(["Label"], axis=1)
-
-# # 첫 번째 결정 트리 시각화
-# plt.figure(figsize=(20, 10))
-# plot_tree(
-#     model.estimators_[0],  # 첫 번째 트리 선택
-#     feature_names=X.columns,  # Feature 이름
-#     filled=True,  # 색상 채우기
-#     rounded=True,  # 둥글게 표시
-#     class_names=["Normal", "Abnormal"],  # 클래스 이름
-# )
-# plt.title("Visualizing Random Forest - First Tree")
-# plt.show()
-
-# # 각 리프 노드에서 예측된 클래스 값 출력
-# n_trees = len(model.estimators_)
-# for i in range(n_trees):
-#     tree = model.estimators_[i]
-#     n_nodes = tree.tree_.node_count
-#     children_left = tree.tree_.children_left
-#     children_right = tree.tree_.children_right
-#     value = tree.tree_.value
-
-#     for node in range(n_nodes):
-#         if children_left[node] != children_right[node]:  # 리프 노드가 아닐 경우
-#             continue
-#         # 클래스 예측 값 (리프 노드의 가장 높은 값)
-#         predicted_class = value[node].argmax()
-#         print(f"Tree {i}, Node {node}: Predicted class = {predicted_class} (0: Normal, 1: Abnormal)")
+# joblib.dump(model, "random_forest_model12.pkl")
+print("Model saved as random_forest_model.pkl")
